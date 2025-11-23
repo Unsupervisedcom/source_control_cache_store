@@ -4,7 +4,6 @@ require "active_support"
 require "active_support/cache"
 require "active_support/notifications"
 require "active_support/core_ext/object/json"
-require "active_support/core_ext/digest"
 require "digest"
 require "fileutils"
 
@@ -63,7 +62,7 @@ module ActiveSupport
         
         # Create a new entry that never expires
         ActiveSupport::Cache::Entry.new(entry.value, expires_in: nil)
-      rescue => e
+      rescue
         # If we can't read or deserialize, treat as cache miss
         nil
       end
@@ -84,7 +83,7 @@ module ActiveSupport
         File.write(value_path(hash), serialize_entry(entry, **options))
         
         true
-      rescue => e
+      rescue
         # Return false if write fails (permissions, disk space, etc.)
         false
       end
@@ -103,13 +102,13 @@ module ActiveSupport
         
         begin
           deleted = true if File.exist?(key_file) && File.delete(key_file)
-        rescue => e
+        rescue
           # Ignore errors, continue trying to delete value file
         end
         
         begin
           deleted = true if File.exist?(value_file) && File.delete(value_file)
-        rescue => e
+        rescue
           # Ignore errors
         end
         
