@@ -73,7 +73,7 @@ module ActiveSupport
       # @param key [String] The cache key
       # @param entry [ActiveSupport::Cache::Entry] The cache entry
       # @param options [Hash] Options (expiration is ignored)
-      # @return [Boolean] Always returns true
+      # @return [Boolean] Returns true on success, false on failure
       def write_entry(key, entry, **options)
         hash = hash_key(key)
         
@@ -84,6 +84,9 @@ module ActiveSupport
         File.write(value_path(hash), serialize_entry(entry, **options))
         
         true
+      rescue => e
+        # Return false if write fails (permissions, disk space, etc.)
+        false
       end
 
       # Delete an entry from the cache
@@ -97,8 +100,18 @@ module ActiveSupport
         value_file = value_path(hash)
         
         deleted = false
-        deleted = true if File.exist?(key_file) && File.delete(key_file)
-        deleted = true if File.exist?(value_file) && File.delete(value_file)
+        
+        begin
+          deleted = true if File.exist?(key_file) && File.delete(key_file)
+        rescue => e
+          # Ignore errors, continue trying to delete value file
+        end
+        
+        begin
+          deleted = true if File.exist?(value_file) && File.delete(value_file)
+        rescue => e
+          # Ignore errors
+        end
         
         deleted
       end
