@@ -90,15 +90,15 @@ module ActiveSupport
       #
       # @param key [String] The cache key
       # @param options [Hash] Options (unused)
-      # @return [Boolean] Returns true if the entry was deleted
+      # @return [Boolean] Returns true if any file was deleted
       def delete_entry(key, **options)
         hash = hash_key(key)
         key_file = key_path(hash)
         value_file = value_path(hash)
         
         deleted = false
-        deleted = File.delete(key_file) if File.exist?(key_file)
-        deleted = File.delete(value_file) if File.exist?(value_file)
+        deleted = true if File.exist?(key_file) && File.delete(key_file)
+        deleted = true if File.exist?(value_file) && File.delete(value_file)
         
         deleted
       end
