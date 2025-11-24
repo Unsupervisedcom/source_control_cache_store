@@ -4,7 +4,7 @@ Gem::Specification.new do |spec|
   spec.name          = "source_control_cache_store"
   spec.version       = "0.1.0"
   spec.authors       = ["Unsupervised.com"]
-  spec.email         = ["hello@unsupervised.com"]
+  spec.email         = ["noah@unsupervised.com"]
 
   spec.summary       = "Rails cache store appropriate for storing the results in source control"
   spec.description   = "A Rails cache store that stores cache entries as files suitable for version control"
