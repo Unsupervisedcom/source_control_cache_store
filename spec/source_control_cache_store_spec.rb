@@ -45,7 +45,7 @@ RSpec.describe ActiveSupport::Cache::SourceControlCacheStore do
       store.write("my_key", "my_value")
       
       # Calculate the expected hash
-      hash = Digest::SHA256.hexdigest("my_key")
+      hash = ActiveSupport::Digest.hexdigest("my_key")
       key_file = File.join(cache_path, "#{hash}.key")
       value_file = File.join(cache_path, "#{hash}.value")
       
@@ -57,7 +57,7 @@ RSpec.describe ActiveSupport::Cache::SourceControlCacheStore do
       original_key = "my_special_key"
       store.write(original_key, "value")
       
-      hash = Digest::SHA256.hexdigest(original_key)
+      hash = ActiveSupport::Digest.hexdigest(original_key)
       key_file = File.join(cache_path, "#{hash}.key")
       
       expect(File.read(key_file)).to eq(original_key)
@@ -82,7 +82,7 @@ RSpec.describe ActiveSupport::Cache::SourceControlCacheStore do
 
     it "removes both .key and .value files" do
       store.write("key", "value")
-      hash = Digest::SHA256.hexdigest("key")
+      hash = ActiveSupport::Digest.hexdigest("key")
       key_file = File.join(cache_path, "#{hash}.key")
       value_file = File.join(cache_path, "#{hash}.value")
       
@@ -149,9 +149,9 @@ RSpec.describe ActiveSupport::Cache::SourceControlCacheStore do
   end
 
   describe "key hashing" do
-    it "uses SHA256 for hashing keys" do
+    it "uses ActiveSupport::Digest for hashing keys" do
       key = "test_key"
-      expected_hash = Digest::SHA256.hexdigest(key)
+      expected_hash = ActiveSupport::Digest.hexdigest(key)
       
       store.write(key, "value")
       
@@ -215,9 +215,9 @@ RSpec.describe ActiveSupport::Cache::SourceControlCacheStore do
       store_with_delimiter.write("foo---bar---boo-ba", "27")
       
       # Calculate expected hashes
-      foo_hash = Digest::SHA256.hexdigest("foo")
-      bar_hash = Digest::SHA256.hexdigest("bar")
-      boo_ba_hash = Digest::SHA256.hexdigest("boo-ba")
+      foo_hash = ActiveSupport::Digest.hexdigest("foo")
+      bar_hash = ActiveSupport::Digest.hexdigest("bar")
+      boo_ba_hash = ActiveSupport::Digest.hexdigest("boo-ba")
       
       # Check that directories exist
       expect(File.directory?(File.join(cache_path_with_delimiter, foo_hash))).to be true
@@ -228,9 +228,9 @@ RSpec.describe ActiveSupport::Cache::SourceControlCacheStore do
     it "creates _key_chunk files with correct content" do
       store_with_delimiter.write("foo---bar---boo-ba", "27")
       
-      foo_hash = Digest::SHA256.hexdigest("foo")
-      bar_hash = Digest::SHA256.hexdigest("bar")
-      boo_ba_hash = Digest::SHA256.hexdigest("boo-ba")
+      foo_hash = ActiveSupport::Digest.hexdigest("foo")
+      bar_hash = ActiveSupport::Digest.hexdigest("bar")
+      boo_ba_hash = ActiveSupport::Digest.hexdigest("boo-ba")
       
       # Check _key_chunk files
       foo_chunk_file = File.join(cache_path_with_delimiter, foo_hash, "_key_chunk")
@@ -245,9 +245,9 @@ RSpec.describe ActiveSupport::Cache::SourceControlCacheStore do
     it "stores value in the final directory" do
       store_with_delimiter.write("foo---bar---boo-ba", "27")
       
-      foo_hash = Digest::SHA256.hexdigest("foo")
-      bar_hash = Digest::SHA256.hexdigest("bar")
-      boo_ba_hash = Digest::SHA256.hexdigest("boo-ba")
+      foo_hash = ActiveSupport::Digest.hexdigest("foo")
+      bar_hash = ActiveSupport::Digest.hexdigest("bar")
+      boo_ba_hash = ActiveSupport::Digest.hexdigest("boo-ba")
       
       value_file = File.join(cache_path_with_delimiter, foo_hash, bar_hash, boo_ba_hash, "value")
       
@@ -263,7 +263,7 @@ RSpec.describe ActiveSupport::Cache::SourceControlCacheStore do
     it "handles single chunk keys (no delimiter present)" do
       store_with_delimiter.write("single_key", "single_value")
       
-      single_hash = Digest::SHA256.hexdigest("single_key")
+      single_hash = ActiveSupport::Digest.hexdigest("single_key")
       value_file = File.join(cache_path_with_delimiter, single_hash, "value")
       
       expect(File.exist?(value_file)).to be true
@@ -313,6 +313,23 @@ RSpec.describe ActiveSupport::Cache::SourceControlCacheStore do
       key = "a---b---c---d---e---f"
       store_with_delimiter.write(key, "deep_value")
       expect(store_with_delimiter.read(key)).to eq("deep_value")
+    end
+
+    it "deletes only the specific entry without affecting others with common prefixes" do
+      # Write two keys that share the first chunk
+      store_with_delimiter.write("foo---bar", "value1")
+      store_with_delimiter.write("foo---baz", "value2")
+      
+      # Verify both exist
+      expect(store_with_delimiter.read("foo---bar")).to eq("value1")
+      expect(store_with_delimiter.read("foo---baz")).to eq("value2")
+      
+      # Delete the first one
+      store_with_delimiter.delete("foo---bar")
+      
+      # Verify only the deleted one is gone
+      expect(store_with_delimiter.read("foo---bar")).to be_nil
+      expect(store_with_delimiter.read("foo---baz")).to eq("value2")
     end
   end
 end

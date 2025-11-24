@@ -4,7 +4,6 @@ require "active_support"
 require "active_support/cache"
 require "active_support/notifications"
 require "active_support/core_ext/object/json"
-require "digest"
 require "fileutils"
 
 module ActiveSupport
@@ -165,13 +164,19 @@ module ActiveSupport
         
         return false unless File.exist?(value_file)
         
-        # Delete the entire directory tree for this key
+        # Delete only the deepest directory containing this specific entry
         chunks = key.to_s.split(@subdirectory_delimiter)
-        first_chunk_hash = hash_chunk(chunks[0])
-        dir_to_delete = File.join(@cache_path, first_chunk_hash)
+        
+        # Build the full path to the final directory
+        current_dir = @cache_path
+        chunks.each do |chunk|
+          chunk_hash = hash_chunk(chunk)
+          current_dir = File.join(current_dir, chunk_hash)
+        end
         
         begin
-          FileUtils.rm_rf(dir_to_delete) if File.exist?(dir_to_delete)
+          # Delete the final directory (containing _key_chunk and value)
+          FileUtils.rm_rf(current_dir) if File.exist?(current_dir)
           true
         rescue StandardError
           false
@@ -181,17 +186,17 @@ module ActiveSupport
       # Generate a hash for the given key
       #
       # @param key [String] The cache key
-      # @return [String] The SHA256 hash of the key
+      # @return [String] The hash of the key
       def hash_key(key)
-        ::Digest::SHA256.hexdigest(key.to_s)
+        ::ActiveSupport::Digest.hexdigest(key.to_s)
       end
 
       # Generate a hash for a key chunk
       #
       # @param chunk [String] A chunk of the cache key
-      # @return [String] The SHA256 hash of the chunk
+      # @return [String] The hash of the chunk
       def hash_chunk(chunk)
-        ::Digest::SHA256.hexdigest(chunk.to_s)
+        ::ActiveSupport::Digest.hexdigest(chunk.to_s)
       end
 
       # Get the path for the key file
