@@ -89,6 +89,11 @@ module ActiveSupport
       end
 
       # Write entry using simple hash-based file structure
+      #
+      # @param key [String] The cache key
+      # @param entry [ActiveSupport::Cache::Entry] The cache entry
+      # @param options [Hash] Options (expiration is ignored)
+      # @return [Boolean] Returns true on success
       def write_entry_simple(key, entry, **options)
         hash = hash_key(key)
         
@@ -102,12 +107,17 @@ module ActiveSupport
       end
 
       # Write entry using subdirectory structure
+      #
+      # @param key [String] The cache key
+      # @param entry [ActiveSupport::Cache::Entry] The cache entry
+      # @param options [Hash] Options (expiration is ignored)
+      # @return [Boolean] Returns true on success
       def write_entry_with_subdirectories(key, entry, **options)
         chunks = key.to_s.split(@subdirectory_delimiter)
         current_dir = @cache_path
         
         # Create subdirectories for each chunk
-        chunks.each_with_index do |chunk, index|
+        chunks.each do |chunk|
           chunk_hash = hash_chunk(chunk)
           current_dir = File.join(current_dir, chunk_hash)
           FileUtils.mkdir_p(current_dir)
@@ -159,20 +169,17 @@ module ActiveSupport
       end
 
       # Delete entry using subdirectory structure
+      #
+      # @param key [String] The cache key
+      # @param options [Hash] Options (unused)
+      # @return [Boolean] Returns true if the entry was deleted
       def delete_entry_with_subdirectories(key, **options)
         value_file = value_path_for_key(key)
         
         return false unless File.exist?(value_file)
         
         # Delete only the deepest directory containing this specific entry
-        chunks = key.to_s.split(@subdirectory_delimiter)
-        
-        # Build the full path to the final directory
-        current_dir = @cache_path
-        chunks.each do |chunk|
-          chunk_hash = hash_chunk(chunk)
-          current_dir = File.join(current_dir, chunk_hash)
-        end
+        current_dir = subdirectory_path_for_key(key)
         
         begin
           # Delete the final directory (containing _key_chunk and value)
@@ -221,18 +228,26 @@ module ActiveSupport
       # @return [String] The full path to the value file
       def value_path_for_key(key)
         if @subdirectory_delimiter
-          chunks = key.to_s.split(@subdirectory_delimiter)
-          current_dir = @cache_path
-          
-          chunks.each do |chunk|
-            chunk_hash = hash_chunk(chunk)
-            current_dir = File.join(current_dir, chunk_hash)
-          end
-          
-          File.join(current_dir, "value")
+          File.join(subdirectory_path_for_key(key), "value")
         else
           value_path(hash_key(key))
         end
+      end
+
+      # Get the subdirectory path for a given key
+      #
+      # @param key [String] The cache key
+      # @return [String] The full path to the subdirectory for this key
+      def subdirectory_path_for_key(key)
+        chunks = key.to_s.split(@subdirectory_delimiter)
+        current_dir = @cache_path
+        
+        chunks.each do |chunk|
+          chunk_hash = hash_chunk(chunk)
+          current_dir = File.join(current_dir, chunk_hash)
+        end
+        
+        current_dir
       end
     end
   end
