@@ -68,6 +68,38 @@ cache.delete("my_key")
 cache.clear
 ```
 
+### Subdirectory Delimiter
+
+You can optionally configure a `subdirectory_delimiter` to organize cache entries into nested subdirectories based on key segments:
+
+```ruby
+cache = ActiveSupport::Cache::SourceControlCacheStore.new(
+  cache_path: "/path/to/cache/directory",
+  subdirectory_delimiter: "---"
+)
+
+# With delimiter "---", key "foo---bar---boo-ba" creates:
+# /path/to/cache/directory/
+#   hash(foo)/
+#     _key_chunk (contains "foo")
+#     hash(bar)/
+#       _key_chunk (contains "bar")
+#       hash(boo-ba)/
+#         _key_chunk (contains "boo-ba")
+#         value (contains the cached value)
+
+cache.write("foo---bar---boo-ba", "27")
+value = cache.read("foo---bar---boo-ba")  # => "27"
+```
+
+When a delimiter is configured:
+- The cache key is split by the delimiter into segments
+- Each segment creates a subdirectory named `hash(segment)` using SHA256
+- Each subdirectory contains a `_key_chunk` file with the original segment text
+- The cached value is stored in a `value` file in the final subdirectory
+
+This feature is useful for organizing cache entries hierarchically when keys have a natural structure.
+
 ## Key Features
 
 ### Hashed Keys
