@@ -14,7 +14,7 @@ This cache store is designed to be committed to version control, making it ideal
 ## Features
 
 - **File-based storage**: Each cache entry is stored as separate `.key` and `.value` files
-- **Hashed filenames**: Uses SHA256 hashing for keys to create consistent, filesystem-safe filenames
+- **Hashed filenames**: Uses ActiveSupport::Digest for keys to create consistent, filesystem-safe filenames
 - **No expiration**: Cache entries do NOT honor expiration parameters - they persist until explicitly deleted
 - **Rails 7.1+ compatible**: Implements the ActiveSupport::Cache::Store interface
 
@@ -68,11 +68,43 @@ cache.delete("my_key")
 cache.clear
 ```
 
+### Subdirectory Delimiter
+
+You can optionally configure a `subdirectory_delimiter` to organize cache entries into nested subdirectories based on key segments:
+
+```ruby
+cache = ActiveSupport::Cache::SourceControlCacheStore.new(
+  cache_path: "/path/to/cache/directory",
+  subdirectory_delimiter: "---"
+)
+
+# With delimiter "---", key "foo---bar---boo-ba" creates:
+# /path/to/cache/directory/
+#   hash(foo)/
+#     _key_chunk (contains "foo")
+#     hash(bar)/
+#       _key_chunk (contains "bar")
+#       hash(boo-ba)/
+#         _key_chunk (contains "boo-ba")
+#         value (contains the cached value)
+
+cache.write("foo---bar---boo-ba", "27")
+value = cache.read("foo---bar---boo-ba")  # => "27"
+```
+
+When a delimiter is configured:
+- The cache key is split by the delimiter into segments
+- Each segment creates a subdirectory named `hash(segment)` using ActiveSupport::Digest
+- Each subdirectory contains a `_key_chunk` file with the original segment text
+- The cached value is stored in a `value` file in the final subdirectory
+
+This feature is useful for organizing cache entries hierarchically when keys have a natural structure.
+
 ## Key Features
 
 ### Hashed Keys
 
-Keys are hashed using SHA256 to create filesystem-safe filenames. The original key is preserved in the `.key` file, while the hash is used for the filename:
+Keys are hashed using ActiveSupport::Digest to create filesystem-safe filenames. The original key is preserved in the `.key` file, while the hash is used for the filename:
 
 ```ruby
 cache.write("user:123:profile", { name: "John" })

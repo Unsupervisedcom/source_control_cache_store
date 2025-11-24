@@ -45,7 +45,7 @@ RSpec.describe ActiveSupport::Cache::SourceControlCacheStore do
       store.write("my_key", "my_value")
       
       # Calculate the expected hash
-      hash = Digest::SHA256.hexdigest("my_key")
+      hash = ActiveSupport::Digest.hexdigest("my_key")
       key_file = File.join(cache_path, "#{hash}.key")
       value_file = File.join(cache_path, "#{hash}.value")
       
@@ -57,7 +57,7 @@ RSpec.describe ActiveSupport::Cache::SourceControlCacheStore do
       original_key = "my_special_key"
       store.write(original_key, "value")
       
-      hash = Digest::SHA256.hexdigest(original_key)
+      hash = ActiveSupport::Digest.hexdigest(original_key)
       key_file = File.join(cache_path, "#{hash}.key")
       
       expect(File.read(key_file)).to eq(original_key)
@@ -82,7 +82,7 @@ RSpec.describe ActiveSupport::Cache::SourceControlCacheStore do
 
     it "removes both .key and .value files" do
       store.write("key", "value")
-      hash = Digest::SHA256.hexdigest("key")
+      hash = ActiveSupport::Digest.hexdigest("key")
       key_file = File.join(cache_path, "#{hash}.key")
       value_file = File.join(cache_path, "#{hash}.value")
       
@@ -149,9 +149,9 @@ RSpec.describe ActiveSupport::Cache::SourceControlCacheStore do
   end
 
   describe "key hashing" do
-    it "uses SHA256 for hashing keys" do
+    it "uses ActiveSupport::Digest for hashing keys" do
       key = "test_key"
-      expected_hash = Digest::SHA256.hexdigest(key)
+      expected_hash = ActiveSupport::Digest.hexdigest(key)
       
       store.write(key, "value")
       
@@ -196,6 +196,140 @@ RSpec.describe ActiveSupport::Cache::SourceControlCacheStore do
       
       expect(store.read("true_key")).to eq(true)
       expect(store.read("false_key")).to eq(false)
+    end
+  end
+
+  describe "subdirectory_delimiter feature" do
+    let(:cache_path_with_delimiter) { Dir.mktmpdir }
+    let(:store_with_delimiter) { described_class.new(cache_path: cache_path_with_delimiter, subdirectory_delimiter: "---") }
+
+    after do
+      FileUtils.rm_rf(cache_path_with_delimiter) if File.exist?(cache_path_with_delimiter)
+    end
+
+    it "stores subdirectory_delimiter parameter" do
+      expect(store_with_delimiter.subdirectory_delimiter).to eq("---")
+    end
+
+    it "creates nested directories for split keys" do
+      store_with_delimiter.write("foo---bar---boo-ba", "27")
+      
+      # Calculate expected hashes
+      foo_hash = ActiveSupport::Digest.hexdigest("foo")
+      bar_hash = ActiveSupport::Digest.hexdigest("bar")
+      boo_ba_hash = ActiveSupport::Digest.hexdigest("boo-ba")
+      
+      # Check that directories exist
+      expect(File.directory?(File.join(cache_path_with_delimiter, foo_hash))).to be true
+      expect(File.directory?(File.join(cache_path_with_delimiter, foo_hash, bar_hash))).to be true
+      expect(File.directory?(File.join(cache_path_with_delimiter, foo_hash, bar_hash, boo_ba_hash))).to be true
+    end
+
+    it "creates _key_chunk files with correct content" do
+      store_with_delimiter.write("foo---bar---boo-ba", "27")
+      
+      foo_hash = ActiveSupport::Digest.hexdigest("foo")
+      bar_hash = ActiveSupport::Digest.hexdigest("bar")
+      boo_ba_hash = ActiveSupport::Digest.hexdigest("boo-ba")
+      
+      # Check _key_chunk files
+      foo_chunk_file = File.join(cache_path_with_delimiter, foo_hash, "_key_chunk")
+      bar_chunk_file = File.join(cache_path_with_delimiter, foo_hash, bar_hash, "_key_chunk")
+      boo_ba_chunk_file = File.join(cache_path_with_delimiter, foo_hash, bar_hash, boo_ba_hash, "_key_chunk")
+      
+      expect(File.read(foo_chunk_file)).to eq("foo")
+      expect(File.read(bar_chunk_file)).to eq("bar")
+      expect(File.read(boo_ba_chunk_file)).to eq("boo-ba")
+    end
+
+    it "stores value in the final directory" do
+      store_with_delimiter.write("foo---bar---boo-ba", "27")
+      
+      foo_hash = ActiveSupport::Digest.hexdigest("foo")
+      bar_hash = ActiveSupport::Digest.hexdigest("bar")
+      boo_ba_hash = ActiveSupport::Digest.hexdigest("boo-ba")
+      
+      value_file = File.join(cache_path_with_delimiter, foo_hash, bar_hash, boo_ba_hash, "value")
+      
+      expect(File.exist?(value_file)).to be true
+      expect(store_with_delimiter.read("foo---bar---boo-ba")).to eq("27")
+    end
+
+    it "reads values correctly from subdirectory structure" do
+      store_with_delimiter.write("alpha---beta", "test_value")
+      expect(store_with_delimiter.read("alpha---beta")).to eq("test_value")
+    end
+
+    it "handles single chunk keys (no delimiter present)" do
+      store_with_delimiter.write("single_key", "single_value")
+      
+      single_hash = ActiveSupport::Digest.hexdigest("single_key")
+      value_file = File.join(cache_path_with_delimiter, single_hash, "value")
+      
+      expect(File.exist?(value_file)).to be true
+      expect(store_with_delimiter.read("single_key")).to eq("single_value")
+    end
+
+    it "deletes entries in subdirectory structure" do
+      store_with_delimiter.write("foo---bar---baz", "value")
+      expect(store_with_delimiter.read("foo---bar---baz")).to eq("value")
+      
+      result = store_with_delimiter.delete("foo---bar---baz")
+      expect(result).to be_truthy
+      expect(store_with_delimiter.read("foo---bar---baz")).to be_nil
+    end
+
+    it "clears all entries including subdirectories" do
+      store_with_delimiter.write("key1---sub1", "value1")
+      store_with_delimiter.write("key2---sub2", "value2")
+      store_with_delimiter.write("key3---sub3---sub4", "value3")
+      
+      expect(Dir.glob(File.join(cache_path_with_delimiter, "*")).length).to be > 0
+      
+      store_with_delimiter.clear
+      
+      expect(Dir.glob(File.join(cache_path_with_delimiter, "*")).length).to eq(0)
+    end
+
+    it "uses fetch correctly with subdirectory structure" do
+      result = store_with_delimiter.fetch("new---key") { "computed" }
+      expect(result).to eq("computed")
+      expect(store_with_delimiter.read("new---key")).to eq("computed")
+    end
+
+    it "overwrites existing values in subdirectory structure" do
+      store_with_delimiter.write("key---sub", "value1")
+      store_with_delimiter.write("key---sub", "value2")
+      expect(store_with_delimiter.read("key---sub")).to eq("value2")
+    end
+
+    it "handles complex objects in subdirectory structure" do
+      complex_object = { name: "Test", data: [1, 2, 3] }
+      store_with_delimiter.write("obj---data", complex_object)
+      expect(store_with_delimiter.read("obj---data")).to eq(complex_object)
+    end
+
+    it "handles many levels of nesting" do
+      key = "a---b---c---d---e---f"
+      store_with_delimiter.write(key, "deep_value")
+      expect(store_with_delimiter.read(key)).to eq("deep_value")
+    end
+
+    it "deletes only the specific entry without affecting others with common prefixes" do
+      # Write two keys that share the first chunk
+      store_with_delimiter.write("foo---bar", "value1")
+      store_with_delimiter.write("foo---baz", "value2")
+      
+      # Verify both exist
+      expect(store_with_delimiter.read("foo---bar")).to eq("value1")
+      expect(store_with_delimiter.read("foo---baz")).to eq("value2")
+      
+      # Delete the first one
+      store_with_delimiter.delete("foo---bar")
+      
+      # Verify only the deleted one is gone
+      expect(store_with_delimiter.read("foo---bar")).to be_nil
+      expect(store_with_delimiter.read("foo---baz")).to eq("value2")
     end
   end
 end
