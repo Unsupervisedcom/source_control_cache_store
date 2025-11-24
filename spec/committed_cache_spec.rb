@@ -18,26 +18,31 @@ RSpec.describe "Committed Cache Directory" do
     }
   end
   
+  # File list helpers
+  let(:key_files) { Dir.glob(File.join(committed_cache_path, "*.key")) }
+  let(:value_files) { Dir.glob(File.join(committed_cache_path, "*.value")) }
+  let(:all_files) do
+    Dir.glob(File.join(committed_cache_path, "**", "*"), File::FNM_DOTMATCH)
+      .reject { |f| File.directory?(f) }
+      .sort
+  end
+  let(:key_contents) { key_files.map { |f| File.read(f) }.sort }
+  
   # Shared examples for validating cache state
   shared_examples "validates committed cache files" do
     it "has the expected number of key files" do
-      key_files = Dir.glob(File.join(committed_cache_path, "*.key"))
       expect(key_files.length).to eq(3)
     end
     
     it "has the expected number of value files" do
-      value_files = Dir.glob(File.join(committed_cache_path, "*.value"))
       expect(value_files.length).to eq(3)
     end
     
     it "preserves original keys in .key files" do
-      key_files = Dir.glob(File.join(committed_cache_path, "*.key"))
-      key_contents = key_files.map { |f| File.read(f) }.sort
       expect(key_contents).to contain_exactly(*cache_entries.keys.sort)
     end
     
     it "has valid value files that can be deserialized" do
-      value_files = Dir.glob(File.join(committed_cache_path, "*.value"))
       # All value files should be readable
       value_files.each do |value_file|
         expect(File.read(value_file).length).to be > 0
@@ -45,21 +50,14 @@ RSpec.describe "Committed Cache Directory" do
     end
     
     it "maintains the exact file count" do
-      current_files = Dir.glob(File.join(committed_cache_path, "**", "*"), File::FNM_DOTMATCH)
-        .reject { |f| File.directory?(f) }
-        .sort
       # Should have exactly 7 files (3 entries × 2 files each + 1 README.md)
-      expect(current_files.length).to eq(7)
+      expect(all_files.length).to eq(7)
     end
   end
 
   describe "cache stability verification" do
     # Capture initial state for comparison
-    let(:initial_file_list) do
-      Dir.glob(File.join(committed_cache_path, "**", "*"), File::FNM_DOTMATCH)
-        .reject { |f| File.directory?(f) }
-        .sort
-    end
+    let(:initial_file_list) { all_files }
 
     before(:each) do
       # Ensure cache entries exist before each test using raw mode
@@ -77,13 +75,8 @@ RSpec.describe "Committed Cache Directory" do
         store.read(key, raw: true)
       end
 
-      # Get current file list
-      current_files = Dir.glob(File.join(committed_cache_path, "**", "*"), File::FNM_DOTMATCH)
-        .reject { |f| File.directory?(f) }
-        .sort
-
       # Verify no new files were created
-      expect(current_files).to eq(files_before)
+      expect(all_files).to eq(files_before)
     end
 
     it "does not create new files when writing to existing keys with same values" do
@@ -95,13 +88,8 @@ RSpec.describe "Committed Cache Directory" do
         store.write(key, value, raw: true)
       end
 
-      # Get current file list
-      current_files = Dir.glob(File.join(committed_cache_path, "**", "*"), File::FNM_DOTMATCH)
-        .reject { |f| File.directory?(f) }
-        .sort
-
       # Verify no new files were created (same files should exist)
-      expect(current_files).to eq(files_before)
+      expect(all_files).to eq(files_before)
     end
 
     it "has all expected cache files present" do
@@ -122,13 +110,8 @@ RSpec.describe "Committed Cache Directory" do
         end
       end
 
-      # Get current file list
-      current_files = Dir.glob(File.join(committed_cache_path, "**", "*"), File::FNM_DOTMATCH)
-        .reject { |f| File.directory?(f) }
-        .sort
-
       # Verify no new files were created
-      expect(current_files).to eq(files_before)
+      expect(all_files).to eq(files_before)
     end
     
     include_examples "validates committed cache files"
