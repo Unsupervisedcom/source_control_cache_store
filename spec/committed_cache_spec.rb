@@ -7,17 +7,6 @@ RSpec.describe "Committed Cache Directory" do
   let(:committed_cache_path) { File.join(__dir__, "fixtures", "committed_cache") }
   let(:store) { ActiveSupport::Cache::SourceControlCacheStore.new(cache_path: committed_cache_path) }
 
-  # Track files that exist at the start of the test suite
-  let(:initial_files) do
-    if File.directory?(committed_cache_path)
-      Dir.glob(File.join(committed_cache_path, "**", "*"), File::FNM_DOTMATCH)
-        .reject { |f| File.directory?(f) }
-        .sort
-    else
-      []
-    end
-  end
-
   describe "initial cache population" do
     it "creates the cache directory if it doesn't exist" do
       expect(File.directory?(committed_cache_path)).to be true
@@ -52,22 +41,24 @@ RSpec.describe "Committed Cache Directory" do
   end
 
   describe "cache stability verification" do
-    before(:all) do
-      # Capture the state of files before any tests run
-      committed_cache_path = File.join(__dir__, "fixtures", "committed_cache")
-      store = ActiveSupport::Cache::SourceControlCacheStore.new(cache_path: committed_cache_path)
-      
-      # Ensure initial cache entries exist
-      store.write("user:123:profile", { name: "John Doe", email: "john@example.com" })
-      store.write("user:456:profile", { name: "Jane Smith", email: "jane@example.com" })
-      store.write("config:app:settings", { theme: "dark", language: "en" })
-      
-      @initial_file_list = Dir.glob(File.join(committed_cache_path, "**", "*"), File::FNM_DOTMATCH)
+    # Capture initial state for comparison
+    let(:initial_file_list) do
+      Dir.glob(File.join(committed_cache_path, "**", "*"), File::FNM_DOTMATCH)
         .reject { |f| File.directory?(f) }
         .sort
     end
 
+    before(:each) do
+      # Ensure cache entries exist before each test
+      store.write("user:123:profile", { name: "John Doe", email: "john@example.com" })
+      store.write("user:456:profile", { name: "Jane Smith", email: "jane@example.com" })
+      store.write("config:app:settings", { theme: "dark", language: "en" })
+    end
+
     it "does not create new files when reading existing entries" do
+      # Capture state before reading
+      files_before = initial_file_list
+      
       # Read existing entries
       store.read("user:123:profile")
       store.read("user:456:profile")
@@ -79,10 +70,13 @@ RSpec.describe "Committed Cache Directory" do
         .sort
 
       # Verify no new files were created
-      expect(current_files).to eq(@initial_file_list)
+      expect(current_files).to eq(files_before)
     end
 
     it "does not create new files when writing to existing keys with same values" do
+      # Capture state before writing
+      files_before = initial_file_list
+      
       # Write same values to existing keys
       store.write("user:123:profile", { name: "John Doe", email: "john@example.com" })
       store.write("user:456:profile", { name: "Jane Smith", email: "jane@example.com" })
@@ -94,7 +88,7 @@ RSpec.describe "Committed Cache Directory" do
         .sort
 
       # Verify no new files were created (same files should exist)
-      expect(current_files).to eq(@initial_file_list)
+      expect(current_files).to eq(files_before)
     end
 
     it "has all expected cache files present" do
@@ -114,6 +108,9 @@ RSpec.describe "Committed Cache Directory" do
     end
 
     it "does not create new files during multiple read operations" do
+      # Capture state before reading
+      files_before = initial_file_list
+      
       # Perform multiple read operations
       10.times do
         store.read("user:123:profile")
@@ -127,7 +124,7 @@ RSpec.describe "Committed Cache Directory" do
         .sort
 
       # Verify no new files were created
-      expect(current_files).to eq(@initial_file_list)
+      expect(current_files).to eq(files_before)
     end
   end
 
